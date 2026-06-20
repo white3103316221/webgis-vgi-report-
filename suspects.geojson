@@ -1,0 +1,73 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "SUS-001",
+      "properties": {
+        "Suspect_Name": "张某某",
+        "Suspect_Number": "SUS-001",
+        "Description": "男性，约35岁，身高175cm左右，最后一次出现时身穿黑色连帽衫和深色牛仔裤，背一个黑色双肩包。曾出现在市中心商业区附近，行为可疑。",
+        "Date_Saw_Suspect": "",
+        "Report_Date": "",
+        "Reported_By": "",
+        "User_Phone": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.352, 39.985]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "SUS-002",
+      "properties": {
+        "Suspect_Name": "李某某",
+        "Suspect_Number": "SUS-002",
+        "Description": "男性，约28岁，身高180cm，戴黑框眼镜，常穿灰色外套。多次在夜间出现在学校周边区域，曾试图闯入居民住宅。",
+        "Date_Saw_Suspect": "",
+        "Report_Date": "",
+        "Reported_By": "",
+        "User_Phone": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.340, 39.995]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "SUS-003",
+      "properties": {
+        "Suspect_Name": "王某某",
+        "Suspect_Number": "SUS-003",
+        "Description": "女性，约40岁，身高160cm，长发，常携带一个红色手提包。在多个商场实施盗窃，手法熟练，可能为团伙作案。",
+        "Date_Saw_Suspect": "",
+        "Report_Date": "",
+        "Reported_By": "",
+        "User_Phone": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.348, 39.990]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "SUS-004",
+      "properties": {
+        "Suspect_Name": "赵某某",
+        "Suspect_Number": "SUS-004",
+        "Description": "男性，约45岁，身高170cm，体型偏瘦，脸上有疤痕。涉嫌多起诈骗案件，常在公园和老年人活动区域附近活动。",
+        "Date_Saw_Suspect": "",
+        "Report_Date": "",
+        "Reported_By": "",
+        "User_Phone": ""
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [116.344, 39.992]
+      }
+    }
+  ]
+}
