@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>VGI 公众举报平台 - 协助警方破案</title>
+
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
+    </script>
+
+    <style>
+        /* ================================================================
+           全局重置 & 字体
+           ================================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+            background: #0a0e17;
+            color: #e0e0e0;
+        }
+
+        /* ================================================================
+           主布局
+           ================================================================ */
+        .app-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* ================================================================
+           地图容器
+           ================================================================ */
+        #viewDiv {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* ================================================================
+           顶部状态栏
+           ================================================================ */
+        .top-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: linear-gradient(180deg, rgba(10, 14, 23, 0.92) 0%, transparent 100%);
+            padding: 16px 18px 30px;
+            pointer-events: none;
+        }
+
+        .top-bar .app-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+        }
+
+        .top-bar .app-title .badge {
+            display: inline-block;
+            background: rgba(220, 38, 38, 0.85);
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+            vertical-align: middle;
+            letter-spacing: 0.5px;
+        }
+
+        .top-bar .app-subtitle {
+            font-size: 13px;
+            opacity: 0.7;
+            margin-top: 2px;
+            font-weight: 400;
+        }
+
+        /* ================================================================
+           浮动操作按钮
+           ================================================================ */
+        .fab-container {
+            position: absolute;
+            right: 18px;
+            bottom: 200px;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .fab {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(220, 38, 38, 0.9);
+            color: #fff;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(220, 38, 38, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            backdrop-filter: blur(8px);
+        }
+
+        .fab:active {
+            transform: scale(0.92);
+        }
+
+        .fab.secondary {
+            background: rgba(30, 40, 65, 0.92);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            font-size: 18px;
+        }
+
+        /* ================================================================
+           底部面板 (滑动抽屉)
+           ================================================================ */
+        .bottom-panel {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 200;
+            background: rgba(18, 24, 42, 0.96);
+            backdrop-filter: blur(20px);
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.6);
+            max-height: 55vh;
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(0);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .bottom-panel.collapsed {
+            transform: translateY(calc(100% - 60px));
+        }
+
+        /* 拖拽手柄 */
+        .panel-handle {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            padding: 10px 0 6px;
+            cursor: pointer;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .panel-handle .handle-bar {
+            width: 40px;
+            height: 4px;
+            border-radius: 2px;
+            background: rgba(255, 255, 255, 0.25);
+            transition: background 0.3s;
+        }
+
+        .panel-handle:active .handle-bar {
+            background: rgba(255, 255, 255, 0.45);
+        }
+
+        /* 面板头部 */
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 18px 12px;
+            flex-shrink: 0;
+        }
+
+        .panel-header h2 {
+            font-size: 17px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .panel-header .panel-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .panel-header .panel-actions button {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #ccc;
+            padding: 6px 14px;
+            border-radius: 16px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .panel-header .panel-actions button:active {
+            background: rgba(220, 38, 38, 0.3);
+        }
+
+        .panel-header .panel-actions button.active-tab {
+            background: rgba(220, 38, 38, 0.25);
+            border-color: rgba(220, 38, 38, 0.4);
+            color: #ff6b6b;
+        }
+
+        /* 面板内容区域 (可滚动) */
+        .panel-content {
+            padding: 0 18px 18px;
+            overflow-y: auto;
+            max-height: calc(55vh - 80px);
+            scroll-behavior: smooth;
+        }
+
+        .panel-content::-webkit-scrollbar {
+            width: 3px;
+        }
+
+        .panel-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .panel-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
+
+        /* ================================================================
+           嫌犯卡片列表
+           ================================================================ */
+        .suspects-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .suspect-card {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 14px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            transition: all 0.25s ease;
+            cursor: pointer;
+        }
+
+        .suspect-card:active {
+            background: rgba(255, 255, 255, 0.08);
+            transform: scale(0.98);
+        }
+
+        .suspect-card .suspect-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: linear-gradient(135deg, #1a1a3e, #2d0a0a);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .suspect-card .suspect-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .suspect-card .suspect-info .suspect-name {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .suspect-card .suspect-info .suspect-number {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-left: 6px;
+            font-weight: 400;
+        }
+
+        .suspect-card .suspect-info .suspect-desc {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.65);
+            margin-top: 4px;
+            line-height: 1.5;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .suspect-card .report-btn {
+            background: rgba(220, 38, 38, 0.85);
+            border: none;
+            color: #fff;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-family: inherit;
+        }
+
+        .suspect-card .report-btn:active {
+            transform: scale(0.95);
+            background: rgba(220, 38, 38, 1);
+        }
+
+        /* ================================================================
+           举报表单
+           ================================================================ */
+        .report-form {
+            display: none;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .report-form.active {
+            display: flex;
+        }
+
+        .report-form .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .report-form .form-group label {
+            font-size: 13px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .report-form .form-group label .required {
+            color: #ff6b6b;
+            margin-left: 2px;
+        }
+
+        .report-form .form-group input,
+        .report-form .form-group textarea,
+        .report-form .form-group select {
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 11px 14px;
+            font-size: 15px;
+            color: #fff;
+            font-family: inherit;
+            transition: border-color 0.2s;
+            outline: none;
+            width: 100%;
+        }
+
+        .report-form .form-group input:focus,
+        .report-form .form-group textarea:focus,
+        .report-form .form-group select:focus {
+            border-color: rgba(220, 38, 38, 0.5);
+        }
+
+        .report-form .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .report-form .form-group select option {
+            background: #1a1e2e;
+            color: #fff;
+        }
+
+        .report-form .form-group .coords-display {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 2px;
+        }
+
+        /* ================================================================
+           模态弹窗（举报表单 + 地图弹窗通用）
+           ================================================================ */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.65);
+            backdrop-filter: blur(6px);
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .modal-overlay.active { display: flex; }
+
+        .modal-box {
+            background: linear-gradient(180deg, #1a1f35 0%, #0f1525 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 480px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            padding: 24px;
+        }
+        .modal-box::-webkit-scrollbar { width: 4px; }
+        .modal-box::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .modal-header h3 { font-size: 18px; font-weight: 600; color: #fff; margin: 0; }
+
+        .modal-close-btn {
+            width: 32px; height: 32px; border-radius: 50%; border: none;
+            background: rgba(255,255,255,0.08); color: #aaa;
+            font-size: 20px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .modal-close-btn:hover { background: rgba(220,38,38,0.3); color: #ff6b6b; }
+
+        /* 文件上传区域 */
+        .upload-area {
+            border: 2px dashed rgba(255, 255, 255, 0.15);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .upload-area:active {
+            border-color: rgba(220, 38, 38, 0.4);
+            background: rgba(220, 38, 38, 0.05);
+        }
+
+        .upload-area .upload-icon {
+            font-size: 32px;
+            opacity: 0.5;
+        }
+
+        .upload-area .upload-text {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 6px;
+        }
+
+        .upload-area input[type="file"] {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        /* 上传预览 */
+        .upload-preview {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .upload-preview .preview-item {
+            width: 80px;
+            height: 80px;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .upload-preview .preview-item img,
+        .upload-preview .preview-item video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .upload-preview .preview-item .remove-file {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 表单按钮组 */
+        .form-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 4px;
+        }
+
+        .form-buttons button {
+            flex: 1;
+            padding: 12px;
+            border-radius: 12px;
+            border: none;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .form-buttons button:active {
+            transform: scale(0.97);
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, #dc2626, #b91c1c);
+            color: #fff;
+        }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.08);
+            color: #ccc;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        }
+
+        /* ================================================================
+           已提交的举报列表
+           ================================================================ */
+        .reports-list {
+            display: none;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .reports-list.active {
+            display: flex;
+        }
+
+        .report-item {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 12px;
+            padding: 12px 14px;
+        }
+
+        .report-item .report-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+
+        .report-item .report-header .report-suspect {
+            font-weight: 600;
+            font-size: 14px;
+            color: #fff;
+        }
+
+        .report-item .report-header .report-date {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .report-item .report-desc {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.65);
+            line-height: 1.5;
+        }
+
+        .report-item .report-location {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 4px;
+        }
+
+        .report-item .report-files {
+            display: flex;
+            gap: 6px;
+            margin-top: 6px;
+            flex-wrap: wrap;
+        }
+
+        .report-item .report-files .file-thumb {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .report-item .report-files .file-thumb img,
+        .report-item .report-files .file-thumb video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .report-item .report-reporter {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.35);
+            margin-top: 6px;
+        }
+
+        .reports-empty {
+            text-align: center;
+            padding: 30px 20px;
+            color: rgba(255, 255, 255, 0.35);
+        }
+
+        .reports-empty .empty-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+            opacity: 0.4;
+        }
+
+        /* ================================================================
+           成功提示
+           ================================================================ */
+        .toast {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-20px);
+            background: rgba(30, 40, 65, 0.95);
+            backdrop-filter: blur(12px);
+            padding: 12px 24px;
+            border-radius: 14px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+            z-index: 999;
+            opacity: 0;
+            transition: all 0.4s ease;
+            pointer-events: none;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* ================================================================
+           响应式 - 手机
+           ================================================================ */
+        @media (max-width: 600px) {
+            .top-bar {
+                padding: 12px 14px 24px;
+            }
+
+            .top-bar .app-title {
+                font-size: 17px;
+            }
+
+            .top-bar .app-title .badge {
+                font-size: 10px;
+                padding: 1px 8px;
+            }
+
+            .fab-container {
+                right: 14px;
+                bottom: 180px;
+            }
+
+            .fab {
+                width: 46px;
+                height: 46px;
+                font-size: 18px;
+            }
+
+            .bottom-panel {
+                max-height: 60vh;
+                border-radius: 16px 16px 0 0;
+            }
+
+            .panel-header h2 {
+                font-size: 15px;
+            }
+
+            .suspect-card {
+                padding: 12px 14px;
+                gap: 12px;
+            }
+
+            .suspect-card .suspect-avatar {
+                width: 40px;
+                height: 40px;
+                font-size: 16px;
+            }
+
+            .suspect-card .suspect-info .suspect-name {
+                font-size: 14px;
+            }
+
+            .suspect-card .report-btn {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+
+            .panel-content {
+                padding: 0 14px 14px;
+                max-height: calc(60vh - 80px);
+            }
+
+            .report-form .form-group input,
+            .report-form .form-group textarea,
+            .report-form .form-group select {
+                font-size: 14px;
+                padding: 10px 12px;
+            }
+
+            .form-buttons button {
+                padding: 10px;
+                font-size: 14px;
+            }
+
+            .upload-area {
+                padding: 14px;
+            }
+
+            .upload-preview .preview-item {
+                width: 64px;
+                height: 64px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .bottom-panel {
+                max-height: 65vh;
+            }
+
+            .panel-content {
+                max-height: calc(65vh - 80px);
+            }
+        }
+
+        /* ================================================================
+           ArcGIS 控件覆盖
+           ================================================================ */
+        .esri-ui-corner .esri-component {
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        /* 地图弹出窗样式 */
+        .esri-popup {
+            --esri-popup-background: rgba(18, 24, 42, 0.96) !important;
+            --esri-popup-border-color: rgba(255, 255, 255, 0.1) !important;
+            backdrop-filter: blur(12px) !important;
+        }
+
+        .esri-popup__main-container {
+            background: transparent !important;
+            border-radius: 12px !important;
+        }
+
+        .esri-popup__header-title {
+            color: #fff !important;
+            font-size: 14px !important;
+        }
+
+        /* ===== Leaflet 弹窗样式 ===== */
+        .suspect-popup .leaflet-popup-content-wrapper,
+        .report-popup .leaflet-popup-content-wrapper {
+            background: rgba(18, 24, 42, 0.96) !important;
+            color: #e0e0e0 !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 10px !important;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+        }
+        .suspect-popup .leaflet-popup-tip,
+        .report-popup .leaflet-popup-tip {
+            background: rgba(18, 24, 42, 0.96) !important;
+        }
+        .suspect-popup .leaflet-popup-close-button,
+        .report-popup .leaflet-popup-close-button {
+            color: #888 !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ================================================================
+    应用容器
+    ================================================================ -->
+    <div class="app-container">
+
+        <!-- 地图容器 -->
+        <div id="viewDiv"></div>
+
+        <!-- 顶部栏 -->
+        <div class="top-bar">
+            <div class="app-title">
+                🚨 公众举报平台
+                <span class="badge">VGI</span>
+            </div>
+            <div class="app-subtitle">协助警方搜寻四名重要嫌犯 · 您的每一条线索都至关重要</div>
+        </div>
+
+        <!-- Toast 提示 -->
+        <div class="toast" id="toast"></div>
+
+        <!-- 浮动按钮 -->
+        <div class="fab-container">
+            <button class="fab" id="fabReport" title="提交新举报">✏️</button>
+            <button class="fab secondary" id="fabHistory" title="我的举报记录">📋</button>
+            <button class="fab secondary" id="fabLocate" title="定位当前位置">📍</button>
+        </div>
+
+        <!-- ================================================================
+        底部面板
+        ================================================================ -->
+        <div class="bottom-panel" id="bottomPanel">
+            <!-- 拖拽手柄 -->
+            <div class="panel-handle" id="panelHandle">
+                <div class="handle-bar"></div>
+            </div>
+
+            <!-- 面板头部 -->
+            <div class="panel-header">
+                <h2 id="panelTitle">🕵️ 选择嫌犯进行举报</h2>
+                <div class="panel-actions">
+                    <button id="tabSuspects" class="active-tab">嫌犯</button>
+                    <button id="tabReports">记录</button>
+                </div>
+            </div>
+
+            <!-- 面板内容 -->
+            <div class="panel-content" id="panelContent">
+
+                <!-- === 嫌犯列表 (默认视图) === -->
+                <div class="suspects-list" id="suspectsList"></div>
+
+                <!-- === 已提交的举报记录 === -->
+                <div class="reports-list" id="reportsList">
+                    <div class="reports-empty" id="reportsEmpty">
+                        <div class="empty-icon">📭</div>
+                        <div>暂无举报记录</div>
+                        <div style="font-size:12px;margin-top:4px;">点击右下角 ✏️ 按钮提交您的第一条线索</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 模态弹窗（放在 app-container 外层，避免被 overflow:hidden 裁剪） -->
+    <div class="modal-overlay" id="reportModal">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>📝 提交举报信息</h3>
+                <button class="modal-close-btn" id="formCancelBtn">✕</button>
+            </div>
+            <div class="report-form" id="reportForm">
+                <div class="form-group">
+                    <label>嫌犯 <span class="required">*</span></label>
+                    <select id="formSuspect">
+                        <option value="">-- 请选择嫌犯 --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>目击描述 <span class="required">*</span></label>
+                    <textarea id="formDesc" placeholder="请详细描述您看到嫌犯的时间、地点、当时在做什么等情况..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>目击地点坐标</label>
+                    <div style="display:flex;gap:8px;">
+                        <input id="formLong" type="text" placeholder="经度" readonly style="flex:1;">
+                        <input id="formLat" type="text" placeholder="纬度" readonly style="flex:1;">
+                    </div>
+                    <div class="coords-display">💡 点击地图上的位置可自动获取坐标</div>
+                    <button type="button" id="useLocationBtn" style="margin-top:6px;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.3);color:#93c5fd;padding:8px 14px;border-radius:10px;font-size:13px;cursor:pointer;font-family:inherit;width:100%;">📍 使用我的当前位置</button>
+                </div>
+                <div class="form-group">
+                    <label>目击日期 <span class="required">*</span></label>
+                    <input id="formDateSeen" type="date">
+                </div>
+                <div class="form-group">
+                    <label>您的姓名/昵称</label>
+                    <input id="formReporter" type="text" placeholder="可选，如匿名可不填">
+                </div>
+                <div class="form-group">
+                    <label>联系电话 <span class="required">*</span></label>
+                    <input id="formPhone" type="tel" placeholder="方便警方与您联系核实线索">
+                </div>
+                <div class="form-group">
+                    <label>上传照片或视频</label>
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📸</div>
+                        <div class="upload-text">点击此处上传照片或视频<br><small>支持 jpg/png/mp4 格式</small></div>
+                        <input type="file" id="fileInput" accept="image/*,video/*" multiple>
+                    </div>
+                    <div class="upload-preview" id="uploadPreview"></div>
+                </div>
+                <div class="form-buttons">
+                    <button class="btn-cancel" id="formCancel">取消</button>
+                    <button class="btn-submit" id="formSubmit">📤 提交举报</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================================================================
+    JavaScript
+    ================================================================ -->
+    <script>
+        // 全局错误捕获，显示在页面上方便调试
+        window.onerror = function(msg, url, line) {
+            const errDiv = document.getElementById('mapError') || (function(){
+                const d = document.createElement('div');
+                d.id = 'mapError';
+                d.style.cssText = 'position:fixed;bottom:0;left:0;right:0;z-index:9999;background:rgba(220,38,38,0.95);color:#fff;padding:16px 20px;font-size:13px;line-height:1.6;font-family:monospace;border-top:3px solid #ff6b6b;';
+                document.body.appendChild(d);
+                return d;
+            })();
+            errDiv.innerHTML = '<b>❌ JS 错误:</b> ' + msg + '<br><b>位置:</b> ' + url + ':' + line;
+            console.error(msg, url, line);
+        };
+        // ================================================================
+        // 1. 嫌犯数据 (支持从 CSV 加载，也支持硬编码后备)
+        // ================================================================
+
+        // CSV 解析函数：将 CSV 文本解析为对象数组
+        function parseCSV(text) {
+            const lines = text.trim().split('\n');
+            if (lines.length < 2) return [];
+            const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+            const result = [];
+            for (let i = 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line) continue;
+                // 处理引号内的逗号
+                const values = [];
+                let current = '';
+                let inQuotes = false;
+                for (let ch of line) {
+                    if (ch === '"') { inQuotes = !inQuotes; continue; }
+                    if (ch === ',' && !inQuotes) { values.push(current.trim()); current = ''; continue; }
+                    current += ch;
+                }
+                values.push(current.trim());
+                const obj = {};
+                headers.forEach((h, idx) => { obj[h] = values[idx] || ''; });
+                result.push(obj);
+            }
+            return result;
+        }
+
+        // 尝试从 CSV 加载数据；若失败则使用硬编码后备数据
+        function loadSuspectsFromCSV() {
+            return fetch('suspects.csv')
+                .then(res => {
+                    if (!res.ok) throw new Error('CSV 加载失败');
+                    return res.text();
+                })
+                .then(text => {
+                    const rows = parseCSV(text);
+                    if (rows.length === 0) throw new Error('CSV 为空');
+                    // 映射为内部数据结构
+                    return rows.map((row, idx) => ({
+                        id: row.Suspect_Number || ('SUS-' + String(idx + 1).padStart(3, '0')),
+                        name: row.Suspect_Name || ('嫌犯' + (idx + 1)),
+                        emoji: ['👤', '👓', '👩', '🧑'][idx] || '👤',
+                        desc: row.Description || '暂无描述',
+                        lng: parseFloat(row.Long) || 116.35,
+                        lat: parseFloat(row.Lat) || 39.99
+                    }));
+                })
+                .catch(() => null); // 加载失败返回 null
+        }
+
+        // 后备数据（当 CSV 无法加载时使用）
+        const FALLBACK_SUSPECTS = [{
+            id: 'SUS-001',
+            name: '张某某',
+            emoji: '👤',
+            desc: '男性，约35岁，身高175cm左右，最后一次出现时身穿黑色连帽衫和深色牛仔裤，背一个黑色双肩包。曾出现在市中心商业区附近，行为可疑。',
+            lng: 116.352,
+            lat: 39.985
+        }, {
+            id: 'SUS-002',
+            name: '李某某',
+            emoji: '👓',
+            desc: '男性，约28岁，身高180cm，戴黑框眼镜，常穿灰色外套。多次在夜间出现在学校周边区域，曾试图闯入居民住宅。',
+            lng: 116.340,
+            lat: 39.995
+        }, {
+            id: 'SUS-003',
+            name: '王某某',
+            emoji: '👩',
+            desc: '女性，约40岁，身高160cm，长发，常携带一个红色手提包。在多个商场实施盗窃，手法熟练，可能为团伙作案。',
+            lng: 116.348,
+            lat: 39.990
+        }, {
+            id: 'SUS-004',
+            name: '赵某某',
+            emoji: '🧑',
+            desc: '男性，约45岁，身高170cm，体型偏瘦，脸上有疤痕。涉嫌多起诈骗案件，常在公园和老年人活动区域附近活动。',
+            lng: 116.344,
+            lat: 39.992
+        }];
+
+        // 最终的 SUSPECTS 数据（异步赋值）
+        let SUSPECTS = [];
+
+        // ================================================================
+        // 2. 状态变量
+        // ================================================================
+        let view = null;
+        let markerLayer = null;
+        let suspectMarkers = [];
+        let currentTab = 'suspects'; // 'suspects' | 'reports'
+        let panelCollapsed = false;
+        let isFormActive = false;
+        let uploadedFiles = [];
+        let selectedCoords = null;
+        let reports = [];
+        let suspectGraphics = []; // kept for compatibility
+
+        // ================================================================
+        // 3. DOM 引用
+        // ================================================================
+        const $ = (id) => document.getElementById(id);
+        const suspectsList = $('suspectsList');
+        const reportModal = $('reportModal');
+        const reportForm = $('reportForm');
+        const reportsList = $('reportsList');
+        const reportsEmpty = $('reportsEmpty');
+        const panelTitle = $('panelTitle');
+        const panelContent = $('panelContent');
+        const bottomPanel = $('bottomPanel');
+        const panelHandle = $('panelHandle');
+        const tabSuspects = $('tabSuspects');
+        const tabReports = $('tabReports');
+        const formSuspect = $('formSuspect');
+        const formDesc = $('formDesc');
+        const formLong = $('formLong');
+        const formLat = $('formLat');
+        const formDateSeen = $('formDateSeen');
+        const formReporter = $('formReporter');
+        const formPhone = $('formPhone');
+        const fileInput = $('fileInput');
+        const uploadPreview = $('uploadPreview');
+        const formSubmit = $('formSubmit');
+        const formCancel = $('formCancel');
+        const fabReport = $('fabReport');
+        const fabHistory = $('fabHistory');
+        const fabLocate = $('fabLocate');
+        const toast = $('toast');
+
+        // ================================================================
+        // 4. 工具函数
+        // ================================================================
+        function showToast(msg, duration) {
+            duration = duration || 2500;
+            toast.textContent = msg;
+            toast.classList.add('show');
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => toast.classList.remove('show'), duration);
+        }
+
+        function formatDate(d) {
+            const dt = new Date(d);
+            return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+        }
+
+        function getTodayStr() {
+            const d = new Date();
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+        }
+
+        // ================================================================
+        // 5. 加载/保存举报数据 (localStorage)
+        // ================================================================
+        function loadReports() {
+            try {
+                const data = localStorage.getItem('vgi_reports');
+                if (data) reports = JSON.parse(data);
+                else reports = [];
+            } catch (e) { reports = []; }
+        }
+
+        function saveReports() {
+            try {
+                localStorage.setItem('vgi_reports', JSON.stringify(reports));
+            } catch (e) { console.warn('保存举报数据失败', e); }
+        }
+
+        // ================================================================
+        // 6. 渲染嫌犯列表
+        // ================================================================
+        function renderSuspects() {
+            suspectsList.innerHTML = SUSPECTS.map(s => `
+                <div class="suspect-card" data-id="${s.id}">
+                    <div class="suspect-avatar">${s.emoji}</div>
+                    <div class="suspect-info">
+                        <div class="suspect-name">
+                            ${s.name}
+                            <span class="suspect-number">${s.id}</span>
+                        </div>
+                        <div class="suspect-desc">${s.desc}</div>
+                    </div>
+                    <button class="report-btn" onclick="openReportForm('${s.id}')">举报</button>
+                </div>
+            `).join('');
+
+            // 点击卡片跳转到地图位置
+            suspectsList.querySelectorAll('.suspect-card').forEach(card => {
+                card.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('report-btn')) return;
+                    const id = card.dataset.id;
+                    const s = SUSPECTS.find(x => x.id === id);
+                    if (s && view) {
+                        view.flyTo([s.lat, s.lng], 16, { duration: 0.8 });
+                        highlightSuspect(s.id);
+                        panelCollapsed = false;
+                        bottomPanel.classList.remove('collapsed');
+                    }
+                });
+            });
+        }
+
+        // ================================================================
+        // 7. 打开举报表单
+        // ================================================================
+        function openReportForm(suspectId) {
+            isFormActive = true;
+            currentTab = 'form';
+
+            // 显示模态弹窗和表单
+            reportModal.classList.add('active');
+            reportForm.classList.add('active');
+
+            // 填充表单
+            formSuspect.value = suspectId || '';
+            formDesc.value = '';
+            formDateSeen.value = getTodayStr();
+            formReporter.value = '';
+            formPhone.value = '';
+            uploadedFiles = [];
+            renderUploadPreview();
+            selectedCoords = null;
+
+            // 如果有嫌犯坐标，自动填充
+            if (suspectId) {
+                const s = SUSPECTS.find(x => x.id === suspectId);
+                if (s) {
+                    formLong.value = s.lng.toFixed(6);
+                    formLat.value = s.lat.toFixed(6);
+                    selectedCoords = { lng: s.lng, lat: s.lat };
+                }
+            } else {
+                formLong.value = '';
+                formLat.value = '';
+            }
+        }
+
+        function closeReportForm() {
+            isFormActive = false;
+            reportModal.classList.remove('active');
+            reportForm.classList.remove('active');
+        }
+
+        // ================================================================
+        // 8. 文件上传预览
+        // ================================================================
+        function renderUploadPreview() {
+            if (uploadedFiles.length === 0) {
+                uploadPreview.innerHTML = '';
+                return;
+            }
+
+            uploadPreview.innerHTML = uploadedFiles.map((f, i) => {
+                const isVideo = f.type.startsWith('video/');
+                return `
+                    <div class="preview-item">
+                        ${isVideo
+                            ? `<video src="${f.data}" muted></video>`
+                            : `<img src="${f.data}" alt="预览图片">`
+                        }
+                        <button class="remove-file" data-index="${i}">×</button>
+                    </div>
+                `;
+            }).join('');
+
+            uploadPreview.querySelectorAll('.remove-file').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const idx = parseInt(btn.dataset.index);
+                    uploadedFiles.splice(idx, 1);
+                    renderUploadPreview();
+                });
+            });
+        }
+
+        // ================================================================
+        // 9. 提交举报
+        // ================================================================
+        function handleSubmitReport() {
+            const suspectId = formSuspect.value;
+            const desc = formDesc.value.trim();
+            const dateSeen = formDateSeen.value;
+            const reporter = formReporter.value.trim();
+            const phone = formPhone.value.trim();
+
+            if (!suspectId) {
+                showToast('请选择要举报的嫌犯');
+                return;
+            }
+            if (!desc) {
+                showToast('请填写目击描述');
+                return;
+            }
+            if (!dateSeen) {
+                showToast('请选择目击日期');
+                return;
+            }
+            if (!phone) {
+                showToast('请填写联系电话，方便警方联系您');
+                return;
+            }
+
+            const suspect = SUSPECTS.find(s => s.id === suspectId);
+            const report = {
+                id: 'RPT-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
+                suspectId: suspectId,
+                suspectName: suspect ? suspect.name : '未知',
+                description: desc,
+                lng: selectedCoords ? selectedCoords.lng : (suspect ? suspect.lng : 0),
+                lat: selectedCoords ? selectedCoords.lat : (suspect ? suspect.lat : 0),
+                dateSeen: dateSeen,
+                reportDate: new Date().toISOString(),
+                reportedBy: reporter || '匿名举报',
+                userPhone: phone,
+                files: uploadedFiles.map(f => ({ type: f.type, data: f.data, name: f.name }))
+            };
+
+            reports.unshift(report);
+            saveReports();
+
+            showToast('✅ 举报提交成功！感谢您为公共安全做出的贡献');
+            closeReportForm();
+            renderReports();
+
+            // 地图上添加举报标记
+            addReportMarker(report);
+        }
+
+        // ================================================================
+        // 10. 渲染举报记录
+        // ================================================================
+        function renderReports() {
+            const container = reportsList;
+
+            if (reports.length === 0) {
+                container.innerHTML = `
+                    <div class="reports-empty">
+                        <div class="empty-icon">📭</div>
+                        <div>暂无举报记录</div>
+                        <div style="font-size:12px;margin-top:4px;">点击右下角 ✏️ 按钮提交您的第一条线索</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = reports.map(r => `
+                <div class="report-item">
+                    <div class="report-header">
+                        <span class="report-suspect">${r.suspectName} (${r.suspectId})</span>
+                        <span class="report-date">${formatDate(r.reportDate)}</span>
+                    </div>
+                    <div class="report-desc">${r.description}</div>
+                    <div class="report-location">📍 ${r.lng.toFixed(4)}, ${r.lat.toFixed(4)} · 目击: ${r.dateSeen}</div>
+                    ${r.files && r.files.length > 0 ? `
+                        <div class="report-files">
+                            ${r.files.map(f => {
+                                const isVideo = f.type.startsWith('video/');
+                                return `<div class="file-thumb">${
+                                    isVideo ? `<video src="${f.data}" muted></video>` : `<img src="${f.data}" alt="证据图片">`
+                                }</div>`;
+                            }).join('')}
+                        </div>
+                    ` : ''}
+                    <div class="report-reporter">👤 ${r.reportedBy} · 📞 ${r.userPhone}</div>
+                </div>
+            `).join('');
+        }
+
+        // ================================================================
+        // 11. 地图标记 (Leaflet 版本)
+        // ================================================================
+        function addAllSuspectMarkers() {
+            if (!markerLayer) return;
+            markerLayer.clearLayers();
+            suspectMarkers = [];
+
+            SUSPECTS.forEach((s, i) => {
+                // 发光圈
+                const glow = L.circleMarker([s.lat, s.lng], {
+                    radius: 22, color: 'rgba(220,38,38,0.25)',
+                    weight: 1.5, fillColor: 'rgba(220,38,38,0.1)', fillOpacity: 1
+                });
+                markerLayer.addLayer(glow);
+
+                // 主标记
+                const marker = L.circleMarker([s.lat, s.lng], {
+                    radius: 10, color: '#fff', weight: 2,
+                    fillColor: '#dc2626', fillOpacity: 0.9
+                });
+
+                marker.bindPopup(`
+                    <div style="min-width:200px;">
+                        <h3 style="margin:0 0 6px;color:#dc2626;">🚨 ${s.name} (${s.id})</h3>
+                        <p style="margin:0 0 6px;line-height:1.5;font-size:13px;color:#ccc;">${s.desc}</p>
+                        <p style="margin:0 0 8px;font-size:11px;color:#888;">📍 ${s.lat.toFixed(4)}, ${s.lng.toFixed(4)}</p>
+                        <button onclick="openReportForm('${s.id}')"
+                            style="width:100%;padding:8px;background:#dc2626;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">
+                            📝 举报此嫌犯
+                        </button>
+                    </div>
+                `, { className: 'suspect-popup' });
+
+                marker.suspectId = s.id;
+                marker.on('click', () => highlightSuspect(s.id));
+                markerLayer.addLayer(marker);
+                suspectMarkers.push(marker);
+            });
+        }
+
+        function highlightSuspect(suspectId) {
+            suspectMarkers.forEach(m => {
+                if (m.suspectId === suspectId) {
+                    m.setStyle({ radius: 14, fillColor: '#ff6b6b', weight: 3 });
+                } else {
+                    m.setStyle({ radius: 10, fillColor: '#dc2626', weight: 2 });
+                }
+            });
+        }
+
+        function addReportMarker(report) {
+            if (!markerLayer) return;
+            const marker = L.circleMarker([report.lat, report.lng], {
+                radius: 6, color: '#fff', weight: 1,
+                fillColor: 'rgba(59,130,246,0.7)', fillOpacity: 0.8
+            });
+            marker.bindPopup(`
+                <div>
+                    <h4 style="margin:0 0 4px;color:#60a5fa;">📋 举报: ${report.suspectName}</h4>
+                    <p style="margin:0;font-size:12px;color:#ccc;">${report.description}</p>
+                    <p style="margin:4px 0 0;font-size:11px;color:#888;">👤 ${report.reportedBy} · 📞 ${report.userPhone}</p>
+                </div>
+            `, { className: 'report-popup' });
+            markerLayer.addLayer(marker);
+        }
+
+        // ================================================================
+        // 12. 面板切换 (标签)
+        // ================================================================
+        function switchTab(tab) {
+            currentTab = tab;
+
+            if (tab === 'suspects') {
+                suspectsList.style.display = '';
+                reportForm.classList.remove('active');
+                reportsList.classList.remove('active');
+                panelTitle.textContent = '🕵️ 选择嫌犯进行举报';
+                tabSuspects.classList.add('active-tab');
+                tabReports.classList.remove('active-tab');
+                isFormActive = false;
+            } else if (tab === 'reports') {
+                suspectsList.style.display = 'none';
+                reportForm.classList.remove('active');
+                reportsList.classList.add('active');
+                panelTitle.textContent = `📋 我的举报记录 (${reports.length})`;
+                tabSuspects.classList.remove('active-tab');
+                tabReports.classList.add('active-tab');
+                isFormActive = false;
+                renderReports();
+            }
+
+            panelCollapsed = false;
+            bottomPanel.classList.remove('collapsed');
+        }
+
+        // ================================================================
+        // 13. 初始化
+        // ================================================================
+        function init() {
+            loadReports();
+
+            // --- 填充表单选择器 ---
+            SUSPECTS.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = `${s.name} (${s.id})`;
+                formSuspect.appendChild(opt);
+            });
+
+            // --- 渲染嫌犯列表 ---
+            renderSuspects();
+
+            // --- 设置默认日期 ---
+            formDateSeen.value = getTodayStr();
+
+            // --- 渲染举报记录 ---
+            renderReports();
+
+            // --- 面板拖拽 ---
+            panelHandle.addEventListener('click', () => {
+                panelCollapsed = !panelCollapsed;
+                bottomPanel.classList.toggle('collapsed');
+            });
+
+            // --- 标签切换 ---
+            tabSuspects.addEventListener('click', () => switchTab('suspects'));
+            tabReports.addEventListener('click', () => switchTab('reports'));
+
+            // --- 表单按钮 ---
+            formCancel.addEventListener('click', closeReportForm);
+	        const formCancelBtn = $('formCancelBtn');
+            if (formCancelBtn) formCancelBtn.addEventListener('click', closeReportForm);
+            formSubmit.addEventListener('click', handleSubmitReport);
+
+            // --- 点击模态背景关闭 ---
+            reportModal.addEventListener('click', function(e) {
+                if (e.target === this) closeReportForm();
+            });
+
+            // --- 浮动按钮 ---
+            fabReport.addEventListener('click', () => {
+                if (isFormActive) {
+                    closeReportForm();
+                }
+                openReportForm('');
+                // 确保面板展开
+                panelCollapsed = false;
+                bottomPanel.classList.remove('collapsed');
+            });
+
+            fabHistory.addEventListener('click', () => {
+                switchTab('reports');
+                panelCollapsed = false;
+                bottomPanel.classList.remove('collapsed');
+            });
+
+            fabLocate.addEventListener('click', () => {
+                if (navigator.geolocation) {
+                    showToast('正在获取您的位置...');
+                    navigator.geolocation.getCurrentPosition(
+                        (pos) => {
+                            const lng = pos.coords.longitude;
+                            const lat = pos.coords.latitude;
+                            if (view) {
+                                view.flyTo([lat, lng], 16, { duration: 0.8 });
+                                showToast('已定位到您的位置');
+                            }
+                        },
+                        () => {
+                            showToast('无法获取位置，请检查定位权限');
+                        }, { enableHighAccuracy: true, timeout: 10000 }
+                    );
+                } else {
+                    showToast('您的设备不支持定位');
+                }
+            });
+
+            // --- 使用当前位置按钮 ---
+            const useLocationBtn = $('useLocationBtn');
+            if (useLocationBtn) {
+                useLocationBtn.addEventListener('click', () => {
+                    if (navigator.geolocation) {
+                        showToast('正在获取您的位置...');
+                        navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                                const lng = pos.coords.longitude.toFixed(6);
+                                const lat = pos.coords.latitude.toFixed(6);
+                                formLong.value = lng;
+                                formLat.value = lat;
+                                selectedCoords = { lng: parseFloat(lng), lat: parseFloat(lat) };
+                                showToast('✅ 已获取当前位置坐标');
+                            },
+                            () => {
+                                showToast('无法获取位置，请检查定位权限');
+                            }, { enableHighAccuracy: true, timeout: 10000 }
+                        );
+                    } else {
+                        showToast('您的设备不支持定位');
+                    }
+                });
+            }
+
+            // --- 文件上传 ---
+            fileInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                files.forEach(file => {
+                    const reader = new FileReader();
+                    reader.onload = (evt) => {
+                        uploadedFiles.push({
+                            name: file.name,
+                            type: file.type,
+                            data: evt.target.result
+                        });
+                        renderUploadPreview();
+                    };
+                    reader.readAsDataURL(file);
+                });
+                fileInput.value = '';
+            });
+
+            // --- 地图点击获取坐标 ---
+        }
+
+        // ================================================================
+        // 14. 地图初始化 (Leaflet 版本)
+        // ================================================================
+        function initMap() {
+            // 创建地图 (使用 ArcGIS 暗色栅格瓦片)
+            const darkTileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+            const darkRefUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}';
+
+            view = L.map('viewDiv', {
+                center: [39.990, 116.35],
+                zoom: 13,
+                zoomControl: true,
+                attributionControl: true
+            });
+
+            L.tileLayer(darkTileUrl, {
+                attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
+                maxZoom: 19, minZoom: 3
+            }).addTo(view);
+
+            L.tileLayer(darkRefUrl, {
+                attribution: '&copy; <a href="https://www.esri.com/">Esri</a>',
+                maxZoom: 19, minZoom: 3
+            }).addTo(view);
+
+            // 图形图层 (marker 容器)
+            markerLayer = L.layerGroup().addTo(view);
+
+            // 添加比例尺
+            L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(view);
+
+            // 加载嫌犯数据并初始化
+            loadSuspectsFromCSV().then(csvData => {
+                if (csvData && csvData.length > 0) {
+                    SUSPECTS = csvData;
+                    console.log('✅ 已从 suspects.csv 加载嫌犯数据');
+                } else {
+                    SUSPECTS = FALLBACK_SUSPECTS;
+                    console.log('ℹ️ 使用内置嫌犯数据（CSV 未加载）');
+                }
+
+                init();
+                addAllSuspectMarkers();
+                reports.forEach(r => addReportMarker(r));
+            });
+
+            // 地图点击获取坐标 (用于表单)
+            view.on('click', function(e) {
+                if (isFormActive) {
+                    const lng = parseFloat(e.latlng.lng.toFixed(6));
+                    const lat = parseFloat(e.latlng.lat.toFixed(6));
+                    formLong.value = lng;
+                    formLat.value = lat;
+                    selectedCoords = { lng, lat };
+                    showToast('已获取坐标: ' + lng + ', ' + lat);
+                }
+            });
+
+            console.log('✅ VGI 公众举报平台已加载');
+        }
+
+        // 初始化地图（脚本在 body 底部执行，DOM 已就绪）
+        initMap();
+    </script>
+
+</body>
+</html>
